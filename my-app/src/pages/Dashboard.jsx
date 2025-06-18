@@ -1,252 +1,393 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Grid,
   Paper,
   Divider,
-  useTheme,
   TextField,
   MenuItem,
   Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Select,
+  InputLabel,
+  FormControl,
 } from '@mui/material';
+import { Delete, Edit } from '@mui/icons-material';
 import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts';
 
-const Dashboard = () => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
+// Categories example for dropdown (you can customize)
+const categories = {
+  Income: ['Salary', 'Freelance', 'Investments', 'Other'],
+  Expense: ['Food', 'Rent', 'Transportation', 'Entertainment', 'Other'],
+  Savings: ['Emergency Fund', 'Retirement', 'Vacation', 'Other'],
+};
 
-  // Transactions state
-  const [transactions, setTransactions] = useState([
-    { id: 1, type: 'income', category: 'Salary', amount: 5000, date: '2025-06-15' },
-    { id: 2, type: 'expense', category: 'Groceries', amount: 200, date: '2025-06-16' },
-    { id: 3, type: 'expense', category: 'Utilities', amount: 150, date: '2025-06-17' },
-  ]);
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AA336A', '#336AAA'];
 
-  // Form state
+function FinanceDashboard() {
+  // Load transactions from localStorage or start empty
+  const [transactions, setTransactions] = useState(() => {
+    const saved = localStorage.getItem('transactions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [filterMonth, setFilterMonth] = useState(''); // format 'YYYY-MM' or empty for all
+
+  // For add/edit dialog
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(null);
   const [form, setForm] = useState({
-    type: 'income',
+    date: '',
+    description: '',
+    type: 'Income',
     category: '',
     amount: '',
-    date: new Date().toISOString().slice(0, 10), // YYYY-MM-DD
   });
+
+  // Save transactions to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('transactions', JSON.stringify(transactions));
+  }, [transactions]);
+
+  // Filter transactions by month
+  const filteredTransactions = filterMonth
+    ? transactions.filter((t) => t.date.startsWith(filterMonth))
+    : transactions;
 
   // Handle form input change
-  const handleChange = (e) => {
+  function handleFormChange(e) {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-  };
+  }
 
-  // Add new transaction
-  const handleAddTransaction = () => {
-    if (!form.category || !form.amount || !form.date) {
-      alert('Please fill all fields');
+  // Open dialog for add or edit
+  function openDialog(index = null) {
+    if (index !== null) {
+      // Edit
+      setEditingIndex(index);
+      setForm(transactions[index]);
+    } else {
+      // Add
+      setEditingIndex(null);
+      setForm({
+        date: '',
+        description: '',
+        type: 'Income',
+        category: '',
+        amount: '',
+      });
+    }
+    setDialogOpen(true);
+  }
+
+  // Close dialog
+  function closeDialog() {
+    setDialogOpen(false);
+  }
+
+  // Save new or edited transaction
+  function saveTransaction() {
+    if (
+      !form.date ||
+      !form.description.trim() ||
+      !form.type ||
+      !form.category ||
+      !form.amount ||
+      Number(form.amount) <= 0
+    ) {
+      alert('Please fill all fields correctly.');
       return;
     }
+
     const newTransaction = {
-      id: Date.now(),
-      ...form,
+      date: form.date,
+      description: form.description.trim(),
+      type: form.type,
+      category: form.category,
       amount: Number(form.amount),
     };
-    setTransactions((prev) => [newTransaction, ...prev]);
-    // Reset form except date
-    setForm((prev) => ({ ...prev, category: '', amount: '' }));
-  };
 
-  // Calculate summary
-  const incomeTotal = transactions
-    .filter((t) => t.type === 'income')
-    .reduce((acc, curr) => acc + curr.amount, 0);
-
-  const expenseTotal = transactions
-    .filter((t) => t.type === 'expense')
-    .reduce((acc, curr) => acc + curr.amount, 0);
-
-  const balance = incomeTotal - expenseTotal;
-
-  // Chart data by category
-  const expenseData = [];
-  const incomeData = [];
-
-  const expenseCategories = {};
-  const incomeCategories = {};
-
-  transactions.forEach((t) => {
-    if (t.type === 'expense') {
-      expenseCategories[t.category] = (expenseCategories[t.category] || 0) + t.amount;
+    let newTransactions;
+    if (editingIndex !== null) {
+      // Edit existing
+      newTransactions = [...transactions];
+      newTransactions[editingIndex] = newTransaction;
     } else {
-      incomeCategories[t.category] = (incomeCategories[t.category] || 0) + t.amount;
+      // Add new
+      newTransactions = [...transactions, newTransaction];
     }
+    setTransactions(newTransactions);
+    setDialogOpen(false);
+  }
+
+  // Delete a transaction
+  function deleteTransaction(index) {
+    if (window.confirm('Are you sure you want to delete this transaction?')) {
+      const newTransactions = transactions.filter((_, i) => i !== index);
+      setTransactions(newTransactions);
+    }
+  }
+
+  // Aggregate data for monthly bar chart
+  // Sum by month and type
+  const monthlyDataMap = {};
+  transactions.forEach(({ date, type, amount }) => {
+    const month = date.slice(0, 7); // YYYY-MM
+    if (!monthlyDataMap[month]) {
+      monthlyDataMap[month] = { month, Income: 0, Expense: 0, Savings: 0 };
+    }
+    monthlyDataMap[month][type] += amount;
   });
+  const monthlyData = Object.values(monthlyDataMap).sort((a, b) =>
+    a.month.localeCompare(b.month)
+  );
 
-  for (const cat in expenseCategories) {
-    expenseData.push({ name: cat, value: expenseCategories[cat] });
-  }
-  for (const cat in incomeCategories) {
-    incomeData.push({ name: cat, value: incomeCategories[cat] });
-  }
-
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AA336A', '#6633AA'];
+  // Aggregate for category pie chart (filtered transactions)
+  const categoryMap = {};
+  filteredTransactions.forEach(({ category, amount }) => {
+    if (!categoryMap[category]) categoryMap[category] = 0;
+    categoryMap[category] += amount;
+  });
+  const pieData = Object.entries(categoryMap).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
   return (
-    <Box sx={{ flexGrow: 1, p: 3 }}>
-      <Typography variant="h4" gutterBottom color="text.primary">
-        Dashboard Overview
+    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+      <Typography variant="h4" mb={3} align="center">
+        Finance Management Dashboard
       </Typography>
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} mb={4}>
-        {[{
-          title: 'Income',
-          value: incomeTotal,
-          bg: isDark ? '#2e7d32' : '#e8f5e9',
-          color: isDark ? '#a5d6a7' : 'green',
-        }, {
-          title: 'Expenses',
-          value: expenseTotal,
-          bg: isDark ? '#c62828' : '#ffebee',
-          color: isDark ? '#ef9a9a' : 'red',
-        }, {
-          title: 'Balance',
-          value: balance,
-          bg: isDark ? '#1565c0' : '#e3f2fd',
-          color: isDark ? '#90caf9' : '#1976d2',
-        }].map((card) => (
-          <Grid item xs={12} sm={4} key={card.title}>
-            <Paper
-              elevation={3}
-              sx={{
-                p: 3,
-                borderRadius: 3,
-                backgroundColor: card.bg,
-                color: card.color,
-                textAlign: 'center',
-              }}
-            >
-              <Typography variant="subtitle2">{card.title}</Typography>
-              <Typography variant="h5">LKR {card.value.toLocaleString()}</Typography>
-            </Paper>
-          </Grid>
-        ))}
+      {/* Filter by month */}
+      <Box mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <TextField
+          label="Filter by Month"
+          type="month"
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          sx={{ maxWidth: 180 }}
+          InputLabelProps={{ shrink: true }}
+        />
+        <Button variant="contained" onClick={() => openDialog()}>
+          + Add Transaction
+        </Button>
+      </Box>
+
+      {/* Transactions Table */}
+      <Paper sx={{ p: 2, mb: 4 }}>
+        <Typography variant="h6" gutterBottom>
+          Transactions {filterMonth ? `(Filtered: ${filterMonth})` : ''}
+        </Typography>
+        {filteredTransactions.length === 0 ? (
+          <Typography>No transactions found.</Typography>
+        ) : (
+          <Box
+            component="table"
+            sx={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              'th, td': { border: '1px solid #ddd', p: 1, textAlign: 'left' },
+              'th': { backgroundColor: '#f4f4f4' },
+            }}
+          >
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTransactions.map((t, i) => {
+                // Adjust index relative to original array
+                const originalIndex = transactions.indexOf(t);
+                return (
+                  <tr key={i}>
+                    <td>{t.date}</td>
+                    <td>{t.description}</td>
+                    <td>{t.type}</td>
+                    <td>{t.category}</td>
+                    <td>{t.amount.toFixed(2)}</td>
+                    <td>
+                      <IconButton
+                        aria-label="edit"
+                        size="small"
+                        onClick={() => openDialog(originalIndex)}
+                      >
+                        <Edit fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        aria-label="delete"
+                        size="small"
+                        onClick={() => deleteTransaction(originalIndex)}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Box>
+        )}
+      </Paper>
+
+      {/* Charts Section */}
+      <Grid container spacing={4}>
+        <Grid item xs={12} md={7} sx={{ height: 350 }}>
+          <Typography variant="h6" gutterBottom>
+            Monthly Summary
+          </Typography>
+          {monthlyData.length === 0 ? (
+            <Typography>No data to display.</Typography>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyData} margin={{ top: 20, bottom: 20 }}>
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="Income" stackId="a" fill="#4caf50" />
+                <Bar dataKey="Expense" stackId="a" fill="#f44336" />
+                <Bar dataKey="Savings" stackId="a" fill="#2196f3" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </Grid>
+        <Grid item xs={12} md={5} sx={{ height: 350 }}>
+          <Typography variant="h6" gutterBottom>
+            Category Distribution {filterMonth ? `(Filtered)` : ''}
+          </Typography>
+          {pieData.length === 0 ? (
+            <Typography>No data to display.</Typography>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  dataKey="value"
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, percent }) =>
+                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  }
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </Grid>
       </Grid>
 
-      {/* Add Transaction Form */}
-      <Paper sx={{ p: 3, mb: 4, borderRadius: 3, backgroundColor: isDark ? '#1e1e1e' : '#fff' }}>
-        <Typography variant="h6" gutterBottom color="text.primary">
-          Add Transaction
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} sm={3}>
-            <TextField
-              select
-              label="Type"
-              name="type"
-              value={form.type}
-              onChange={handleChange}
-              fullWidth
-              size="small"
-              variant="outlined"
-            >
-              <MenuItem value="income">Income</MenuItem>
-              <MenuItem value="expense">Expense</MenuItem>
-            </TextField>
-          </Grid>
-
-          <Grid item xs={12} sm={3}>
-            <TextField
-              label="Category"
-              name="category"
-              value={form.category}
-              onChange={handleChange}
-              fullWidth
-              size="small"
-              variant="outlined"
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={2}>
-            <TextField
-              label="Amount"
-              name="amount"
-              value={form.amount}
-              onChange={handleChange}
-              type="number"
-              fullWidth
-              size="small"
-              variant="outlined"
-              inputProps={{ min: 0 }}
-            />
-          </Grid>
-
-          <Grid item xs={12} sm={2}>
+      {/* Add/Edit Transaction Dialog */}
+      <Dialog open={dialogOpen} onClose={closeDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingIndex !== null ? 'Edit Transaction' : 'Add Transaction'}</DialogTitle>
+        <DialogContent dividers>
+          <Box
+            component="form"
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              mt: 1,
+            }}
+          >
             <TextField
               label="Date"
               name="date"
-              value={form.date}
-              onChange={handleChange}
               type="date"
-              fullWidth
-              size="small"
-              variant="outlined"
+              value={form.date}
+              onChange={handleFormChange}
               InputLabelProps={{ shrink: true }}
+              required
             />
-          </Grid>
-
-          <Grid item xs={12} sm={2}>
-            <Button variant="contained" onClick={handleAddTransaction} fullWidth>
-              Add
-            </Button>
-          </Grid>
-        </Grid>
-      </Paper>
-
-      {/* Charts */}
-      <Grid container spacing={4}>
-        <Grid item xs={12} md={6} style={{ height: 300 }}>
-          <Typography variant="h6" gutterBottom color="text.primary">
-            Expenses by Category
-          </Typography>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={expenseData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                fill="#8884d8"
-                label
+            <TextField
+              label="Description"
+              name="description"
+              value={form.description}
+              onChange={handleFormChange}
+              required
+            />
+            <FormControl required>
+              <InputLabel id="type-label">Type</InputLabel>
+              <Select
+                labelId="type-label"
+                label="Type"
+                name="type"
+                value={form.type}
+                onChange={(e) => {
+                  handleFormChange(e);
+                  // Reset category when type changes
+                  setForm((prev) => ({ ...prev, category: '' }));
+                }}
               >
-                {expenseData.map((entry, index) => (
-                  <Cell key={`cell-LKR {index}`} fill={COLORS[index % COLORS.length]} />
+                <MenuItem value="Income">Income</MenuItem>
+                <MenuItem value="Expense">Expense</MenuItem>
+                <MenuItem value="Savings">Savings</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl required>
+              <InputLabel id="category-label">Category</InputLabel>
+              <Select
+                labelId="category-label"
+                label="Category"
+                name="category"
+                value={form.category}
+                onChange={handleFormChange}
+              >
+                {(categories[form.type] || []).map((cat) => (
+                  <MenuItem key={cat} value={cat}>
+                    {cat}
+                  </MenuItem>
                 ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </Grid>
-
-        <Grid item xs={12} md={6} style={{ height: 300 }}>
-          <Typography variant="h6" gutterBottom color="text.primary">
-            Income by Category
-          </Typography>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={incomeData}>
-              <XAxis dataKey="name" stroke={isDark ? '#ddd' : '#333'} />
-              <YAxis stroke={isDark ? '#ddd' : '#333'} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#82ca9d" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Grid>
-      </Grid>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Amount"
+              name="amount"
+              type="number"
+              inputProps={{ min: '0.01', step: '0.01' }}
+              value={form.amount}
+              onChange={handleFormChange}
+              required
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDialog}>Cancel</Button>
+          <Button variant="contained" onClick={saveTransaction}>
+            {editingIndex !== null ? 'Save Changes' : 'Add Transaction'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
-};
+}
 
-export default Dashboard;
+export default FinanceDashboard;
