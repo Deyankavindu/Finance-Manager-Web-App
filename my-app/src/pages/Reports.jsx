@@ -1,183 +1,172 @@
-// src/pages/Reports.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
   Paper,
-  TextField,
   Grid,
-  useTheme,
+  Button,
+  TextField,
+  Divider,
 } from '@mui/material';
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell,
-} from 'recharts';
+import jsPDF from 'jspdf';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AA336A', '#6633AA'];
+const ReportsPage = ({ transactions = [] }) => {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [reportData, setReportData] = useState([]);
 
-const Reports = ({ transactions }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-
-  // Date range state
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 1); // default: one month ago
-    return date.toISOString().slice(0, 10);
-  });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
-
-  // Filter transactions by date range
-  const filteredTransactions = transactions.filter((t) => {
-    const tDate = new Date(t.date);
-    return tDate >= new Date(startDate) && tDate <= new Date(endDate);
-  });
-
-  // Summary calculations
-  const incomeTotal = filteredTransactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const expenseTotal = filteredTransactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const balance = incomeTotal - expenseTotal;
-
-  // Prepare monthly summary data for bar chart
-  // Group by month (format: YYYY-MM)
-  const monthlyDataMap = {};
-  filteredTransactions.forEach((t) => {
-    const month = t.date.slice(0, 7); // "YYYY-MM"
-    if (!monthlyDataMap[month]) monthlyDataMap[month] = { month, income: 0, expense: 0 };
-    if (t.type === 'income') monthlyDataMap[month].income += t.amount;
-    else monthlyDataMap[month].expense += t.amount;
-  });
-  const monthlyData = Object.values(monthlyDataMap).sort((a, b) => a.month.localeCompare(b.month));
-
-  // Expense by category pie chart data
-  const expenseCategoryMap = {};
-  filteredTransactions.forEach((t) => {
-    if (t.type === 'expense') {
-      expenseCategoryMap[t.category] = (expenseCategoryMap[t.category] || 0) + t.amount;
+  const handleGenerateReport = () => {
+    if (!startDate || !endDate) {
+      alert('Please select both start and end dates.');
+      return;
     }
-  });
-  const expenseCategoryData = Object.entries(expenseCategoryMap).map(([name, value]) => ({ name, value }));
+
+    const filtered = transactions.filter((t) => {
+      return t.date >= startDate && t.date <= endDate;
+    });
+
+    setReportData(filtered);
+  };
+
+  const getTotal = (type) =>
+    reportData
+      .filter((t) => t.type === type)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('Transaction Report', 10, 10);
+
+    let y = 20;
+    doc.setFontSize(12);
+    doc.text(`Start Date: ${startDate}`, 10, y);
+    y += 7;
+    doc.text(`End Date: ${endDate}`, 10, y);
+    y += 10;
+
+    doc.text(`Income: LKR ${getTotal('Income').toFixed(2)}`, 10, y);
+    y += 7;
+    doc.text(`Expense: LKR ${getTotal('Expense').toFixed(2)}`, 10, y);
+    y += 7;
+    doc.text(`Savings: LKR ${getTotal('Savings').toFixed(2)}`, 10, y);
+    y += 10;
+
+    doc.text('Transactions:', 10, y);
+    y += 7;
+
+    // Table headers
+    doc.text('Date', 10, y);
+    doc.text('Type', 50, y);
+    doc.text('Category', 90, y);
+    doc.text('Amount', 150, y);
+    y += 7;
+
+    // Table rows
+    reportData.forEach((t) => {
+      doc.text(t.date, 10, y);
+      doc.text(t.type, 50, y);
+      doc.text(t.category, 90, y);
+      doc.text(`LKR ${t.amount.toFixed(2)}`, 150, y);
+      y += 7;
+      if (y > 270) {
+        // Avoid writing off the page
+        doc.addPage();
+        y = 10;
+      }
+    });
+
+    doc.save('transaction_report.pdf');
+  };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom color="text.primary">
+    <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
+      <Typography variant="h4" gutterBottom>
         Reports
       </Typography>
 
-      {/* Date Range Selector */}
-      <Paper sx={{ p: 3, mb: 4, backgroundColor: isDark ? '#1e1e1e' : '#fff' }}>
+      <Paper sx={{ p: 3, mb: 4 }}>
         <Typography variant="h6" gutterBottom>
-          Select Date Range
+          Generate Transaction Report
         </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Grid container spacing={2} mb={2}>
+          <Grid item xs={12} sm={6}>
             <TextField
               label="Start Date"
               type="date"
-              fullWidth
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
+              fullWidth
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={12} sm={6}>
             <TextField
               label="End Date"
               type="date"
-              fullWidth
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
+              fullWidth
               InputLabelProps={{ shrink: true }}
             />
           </Grid>
         </Grid>
+        <Button variant="contained" onClick={handleGenerateReport}>
+          Generate Report
+        </Button>
       </Paper>
 
-      {/* Summary */}
-      <Grid container spacing={3} mb={4}>
-        {[{
-          title: 'Income',
-          value: incomeTotal,
-          color: 'green',
-        }, {
-          title: 'Expenses',
-          value: expenseTotal,
-          color: 'red',
-        }, {
-          title: 'Balance',
-          value: balance,
-          color: balance >= 0 ? 'blue' : 'red',
-        }].map(({ title, value, color }) => (
-          <Grid item xs={12} sm={4} key={title}>
-            <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2 }}>
-              <Typography variant="subtitle1" color="text.secondary">{title}</Typography>
-              <Typography variant="h5" sx={{ color }}>LKR {value.toLocaleString()}</Typography>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Monthly Income & Expense Bar Chart */}
-      <Typography variant="h6" gutterBottom>
-        Monthly Income & Expenses
-      </Typography>
-      <Paper sx={{ p: 2, mb: 4, height: 300 }}>
-        {monthlyData.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" textAlign="center" mt={10}>
-            No data available for selected range.
-          </Typography>
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Report Summary
+        </Typography>
+        {reportData.length === 0 ? (
+          <Typography>No transactions in selected date range.</Typography>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyData}>
-              <XAxis dataKey="month" stroke={isDark ? '#ddd' : '#333'} />
-              <YAxis stroke={isDark ? '#ddd' : '#333'} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="income" fill="#82ca9d" name="Income" />
-              <Bar dataKey="expense" fill="#ff6b6b" name="Expenses" />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </Paper>
+          <>
+            <Typography>Income: LKR {getTotal('Income').toFixed(2)}</Typography>
+            <Typography>Expense: LKR {getTotal('Expense').toFixed(2)}</Typography>
+            <Typography>Savings: LKR {getTotal('Savings').toFixed(2)}</Typography>
 
-      {/* Expense by Category Pie Chart */}
-      <Typography variant="h6" gutterBottom>
-        Expenses by Category
-      </Typography>
-      <Paper sx={{ p: 2, height: 300 }}>
-        {expenseCategoryData.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" textAlign="center" mt={10}>
-            No expense data for selected range.
-          </Typography>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={expenseCategoryData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label
-              >
-                {expenseCategoryData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="subtitle1" gutterBottom>
+              Transactions
+            </Typography>
+            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Date</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Type</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Category</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportData.map((t, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '8px' }}>{t.date}</td>
+                    <td style={{ padding: '8px' }}>{t.type}</td>
+                    <td style={{ padding: '8px' }}>{t.category}</td>
+                    <td style={{ padding: '8px' }}>LKR {t.amount.toFixed(2)}</td>
+                  </tr>
                 ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+              </tbody>
+            </Box>
+            <Button
+              variant="outlined"
+              sx={{ mb: 2 }}
+              onClick={handleDownloadPDF}
+            >
+              Download PDF
+            </Button>
+          </>
         )}
       </Paper>
+
+      
     </Box>
   );
 };
 
-export default Reports;
+export default ReportsPage;

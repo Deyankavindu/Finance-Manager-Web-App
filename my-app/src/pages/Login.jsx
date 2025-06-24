@@ -1,4 +1,3 @@
-// src/pages/Login.jsx
 import React, { useState } from 'react';
 import {
   Box,
@@ -9,9 +8,17 @@ import {
   Alert,
   CircularProgress,
   Link,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signInWithPopup,
+} from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 
 const friendlyErrorMessage = (code) => {
@@ -33,11 +40,15 @@ const Login = ({ onLogin }) => {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setError(''); // Clear error on input change
+    setError('');
   };
 
   const handleSubmit = async (e) => {
@@ -54,75 +65,126 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  const goToSignup = () => {
-    navigate('/signup');
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      onLogin();
+    } catch (err) {
+      setError(friendlyErrorMessage(err.code));
+    }
   };
 
+  const handleResetPassword = async () => {
+    setResetMessage('');
+    setResetError('');
+    try {
+      await sendPasswordResetEmail(auth, resetEmail);
+      setResetMessage('Password reset email sent.');
+    } catch (err) {
+      setResetError(friendlyErrorMessage(err.code));
+    }
+  };
+
+  const goToSignup = () => navigate('/signup');
+
   return (
-    <Box
-      display="flex"
-      justifyContent="center"
-      alignItems="center"
-      minHeight="100vh"
-      sx={{ backgroundColor: '#f5f5f5' }}
-    >
-      <Paper sx={{ p: 4, width: 320 }}>
-        <Typography variant="h6" mb={3} textAlign="center">
-          Login
-        </Typography>
+    <>
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="100vh"
+        sx={{ backgroundColor: '#f5f5f5' }}
+      >
+        <Paper sx={{ p: 4, width: 320 }}>
+          <Typography variant="h6" mb={3} textAlign="center">
+            Login
+          </Typography>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
 
-        <form onSubmit={handleSubmit}>
-          <TextField
-            fullWidth
-            label="Email"
-            name="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-            margin="normal"
-            required
-          />
-          <TextField
-            fullWidth
-            label="Password"
-            name="password"
-            type="password"
-            value={form.password}
-            onChange={handleChange}
-            margin="normal"
-            required
-            inputProps={{ minLength: 6 }}
-          />
+          <form onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Email"
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Password"
+              name="password"
+              type="password"
+              value={form.password}
+              onChange={handleChange}
+              margin="normal"
+              required
+              inputProps={{ minLength: 6 }}
+            />
+            <Box display="flex" justifyContent="flex-end">
+              <Link component="button" variant="body2" onClick={() => setDialogOpen(true)}>
+                Forgot Password?
+              </Link>
+            </Box>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 2 }}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Login'}
+            </Button>
+          </form>
+
           <Button
-            type="submit"
             fullWidth
-            variant="contained"
+            variant="outlined"
             sx={{ mt: 2 }}
-            disabled={loading}
+            onClick={handleGoogleLogin}
           >
-            {loading ? <CircularProgress size={24} /> : 'Login'}
+            Sign in with Google
           </Button>
-        </form>
 
-        <Typography mt={2} textAlign="center">
-          Don't have an account?{' '}
-          <Link
-            component="button"
-            variant="body2"
-            onClick={goToSignup}
-            sx={{ cursor: 'pointer' }}
-          >
-            Sign up
-          </Link>
-        </Typography>
-      </Paper>
-    </Box>
+          <Typography mt={2} textAlign="center">
+            Don't have an account?{' '}
+            <Link component="button" variant="body2" onClick={goToSignup}>
+              Sign up
+            </Link>
+          </Typography>
+        </Paper>
+      </Box>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)}>
+        <DialogTitle>Reset Password</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="Enter your email"
+            type="email"
+            value={resetEmail}
+            onChange={(e) => setResetEmail(e.target.value)}
+            margin="normal"
+          />
+          {resetMessage && <Alert severity="success">{resetMessage}</Alert>}
+          {resetError && <Alert severity="error">{resetError}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleResetPassword} variant="contained">
+            Send Email
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 

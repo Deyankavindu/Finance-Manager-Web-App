@@ -15,7 +15,12 @@ import { auth } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 
 const Signup = ({ onSignup }) => {
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -28,10 +33,16 @@ const Signup = ({ onSignup }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    const { email, password, confirmPassword } = form;
 
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
     try {
-      await createUserWithEmailAndPassword(auth, form.email, form.password);
+      await createUserWithEmailAndPassword(auth, email, password);
       onSignup();
     } catch (err) {
       setError(err.message);
@@ -52,7 +63,7 @@ const Signup = ({ onSignup }) => {
       minHeight="100vh"
       sx={{ backgroundColor: '#f5f5f5' }}
     >
-      <Paper sx={{ p: 4, width: 300 }}>
+      <Paper sx={{ p: 4, width: 350 }}>
         <Typography variant="h6" mb={3} textAlign="center">
           Sign Up
         </Typography>
@@ -64,6 +75,16 @@ const Signup = ({ onSignup }) => {
         )}
 
         <form onSubmit={handleSubmit}>
+          <TextField
+            fullWidth
+            label="Name"
+            name="fullName"
+            value={form.fullName}
+            onChange={handleChange}
+            margin="normal"
+            required
+          />
+         
           <TextField
             fullWidth
             label="Email"
@@ -84,6 +105,16 @@ const Signup = ({ onSignup }) => {
             margin="normal"
             required
             inputProps={{ minLength: 6 }}
+          />
+          <TextField
+            fullWidth
+            label="Confirm Password"
+            name="confirmPassword"
+            type="password"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            margin="normal"
+            required
           />
           <Button
             type="submit"
